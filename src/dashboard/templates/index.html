@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Stock Market Analytics Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0a0e17;
+      --bg-card: rgba(18, 26, 43, 0.75);
+      --border-card: rgba(255, 255, 255, 0.08);
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-amber: #f59e0b;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: radial-gradient(circle at 15% 15%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+                        radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.06) 0%, transparent 40%);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Header */
+    .header {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 20px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .header-title h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #60a5fa 0%, #34d399 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .header-title p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent-green);
+    }
+
+    .live-pulse {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.8; }
+      50% { transform: scale(1.3); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.8; }
+    }
+
+    /* Price Cards Grid */
+    .price-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .price-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-card);
+      border-radius: 14px;
+      padding: 16px 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .price-card:hover, .price-card.active {
+      border-color: rgba(59, 130, 246, 0.5);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
+    }
+
+    .price-card.active::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, #3b82f6, #10b981);
+    }
+
+    .card-symbol {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .card-price {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin: 6px 0;
+    }
+
+    .card-change {
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .up { color: var(--accent-green); }
+    .down { color: var(--accent-red); }
+
+    /* Main Section: Chart & KPI Widgets */
+    .middle-section {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 1024px) {
+      .middle-section { grid-template-columns: 1fr; }
+    }
+
+    .chart-panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chart-container {
+      position: relative;
+      flex-grow: 1;
+      min-height: 320px;
+    }
+
+    /* KPI Sidebar */
+    .kpi-column {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-card);
+      border-radius: 14px;
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .kpi-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .kpi-values-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 10px;
+    }
+
+    .kpi-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .kpi-item-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .kpi-item-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .signal-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+
+    .signal-badge {
+      font-size: 1.25rem;
+      font-weight: 800;
+      padding: 8px 24px;
+      border-radius: 10px;
+      letter-spacing: 1px;
+    }
+
+    .signal-buy {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-green);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .signal-sell {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--accent-red);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    .signal-hold {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--accent-amber);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    /* Table Panel */
+    .table-panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 24px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.88rem;
+    }
+
+    th {
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-card);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .tag-sm {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header matching Architecture Diagram -->
+    <header class="header">
+      <div class="header-title">
+        <h1>Real-Time Stock Market Analytics</h1>
+        <p>Kafka + Flink + PostgreSQL + Random Forest Inference + Direct Analytics</p>
+      </div>
+      <div class="live-badge">
+        <div class="live-pulse"></div>
+        <span>LIVE PIPELINE ACTIVE (5s TICKS)</span>
+      </div>
+    </header>
+
+    <!-- Top Price Cards (ICICIBANK, SBIN, HDFCBANK, INFY, TCS) -->
+    <section class="price-grid" id="priceCardsContainer">
+      <!-- Populated dynamically -->
+    </section>
+
+    <!-- Middle Section: Line Chart & KPI Widgets -->
+    <div class="middle-section">
+      <!-- Left: Price vs Time (Line Chart with Moving Average) -->
+      <section class="chart-panel">
+        <div class="panel-header">
+          <h2 id="chartTitle">Price vs Time & Moving Average (INFY)</h2>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Auto-refreshed via Direct Stream</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="stockChart"></canvas>
+        </div>
+      </section>
+
+      <!-- Right: KPI Widgets matching Stage 7 of diagram -->
+      <aside class="kpi-column">
+        <!-- High / Low (Today) -->
+        <div class="kpi-card">
+          <span class="kpi-title">High / Low (Today)</span>
+          <div class="kpi-values-row">
+            <div class="kpi-item">
+              <span class="kpi-item-label">High</span>
+              <span class="kpi-item-val up" id="kpiHigh">₹0.00</span>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-item-label">Low</span>
+              <span class="kpi-item-val down" id="kpiLow">₹0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Moving Average -->
+        <div class="kpi-card">
+          <span class="kpi-title">Moving Average (Stream Windows)</span>
+          <div class="kpi-values-row">
+            <div class="kpi-item">
+              <span class="kpi-item-label">SMA (1 min)</span>
+              <span class="kpi-item-val" id="kpiSma1m" style="color: #60a5fa;">₹0.00</span>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-item-label">SMA (5 min)</span>
+              <span class="kpi-item-val" id="kpiSma5m" style="color: #c084fc;">₹0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Current ML Signal & Confidence -->
+        <div class="kpi-card">
+          <span class="kpi-title">Current Machine Learning Signal</span>
+          <div class="signal-box">
+            <div class="signal-badge signal-buy" id="kpiSignalBadge">BUY</div>
+            <div class="kpi-item" style="text-align: right;">
+              <span class="kpi-item-label">Confidence</span>
+              <span class="kpi-item-val" id="kpiConfidence">78.0%</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Section: Trend & Buy/Sell Signals Table -->
+    <section class="table-panel">
+      <h2 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 16px;">
+        Trend & Buy/Sell Signals (Real-Time Ingestion Log)
+      </h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Symbol</th>
+            <th>Price</th>
+            <th>SMA (1m)</th>
+            <th>RSI (14)</th>
+            <th>Signal</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody id="signalsTableBody">
+          <!-- Populated dynamically -->
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    let activeSymbol = "INFY";
+    let chartInstance = null;
+
+    const symbols = ["ICICIBANK", "SBIN", "HDFCBANK", "INFY", "TCS"];
+
+    // Initialize Chart.js
+    function initChart() {
+      const ctx = document.getElementById("stockChart").getContext("2d");
+      chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Price",
+              data: [],
+              borderColor: "#3b82f6",
+              backgroundColor: "rgba(59, 130, 246, 0.1)",
+              borderWidth: 2.5,
+              tension: 0.35,
+              fill: true,
+              pointRadius: 2
+            },
+            {
+              label: "SMA (1 min)",
+              data: [],
+              borderColor: "#10b981",
+              borderWidth: 2,
+              borderDash: [5, 5],
+              tension: 0.35,
+              fill: false,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 400 },
+          plugins: {
+            legend: {
+              labels: { color: "#9ca3af", font: { family: "Plus Jakarta Sans" } }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: "rgba(255,255,255,0.05)" },
+              ticks: { color: "#6b7280", maxTicksLimit: 8 }
+            },
+            y: {
+              grid: { color: "rgba(255,255,255,0.05)" },
+              ticks: { color: "#6b7280" }
+            }
+          }
+        }
+      });
+    }
+
+    async function fetchDashboardData() {
+      try {
+        const res = await fetch(`/api/dashboard-data?symbol=${activeSymbol}`);
+        const data = await res.json();
+        updateUI(data);
+      } catch (err) {
+        console.error("Error loading dashboard data:", err);
+      }
+    }
+
+    function updateUI(data) {
+      // 1. Render Top Price Cards
+      const cardsContainer = document.getElementById("priceCardsContainer");
+      cardsContainer.innerHTML = "";
+
+      data.cards.forEach(card => {
+        const div = document.createElement("div");
+        div.className = `price-card ${card.symbol === activeSymbol ? "active" : ""}`;
+        div.onclick = () => {
+          activeSymbol = card.symbol;
+          document.getElementById("chartTitle").innerText = `Price vs Time & Moving Average (${activeSymbol})`;
+          fetchDashboardData();
+        };
+
+        const changeClass = card.change_pct >= 0 ? "up" : "down";
+        const sign = card.change_pct >= 0 ? "+" : "";
+
+        div.innerHTML = `
+          <div class="card-symbol">${card.name} (${card.symbol})</div>
+          <div class="card-price">₹${card.price.toFixed(2)}</div>
+          <div class="card-change ${changeClass}">
+            ${sign}${card.change_pct.toFixed(2)}%
+          </div>
+        `;
+        cardsContainer.appendChild(div);
+      });
+
+      // 2. Update KPI Widgets for Active Symbol
+      const activeData = data.cards.find(c => c.symbol === activeSymbol) || data.cards[0];
+      if (activeData) {
+        document.getElementById("kpiHigh").innerText = `₹${activeData.high.toFixed(2)}`;
+        document.getElementById("kpiLow").innerText = `₹${activeData.low.toFixed(2)}`;
+        document.getElementById("kpiSma1m").innerText = `₹${activeData.sma_1m.toFixed(2)}`;
+        document.getElementById("kpiSma5m").innerText = `₹${activeData.sma_5m.toFixed(2)}`;
+
+        const badge = document.getElementById("kpiSignalBadge");
+        badge.innerText = activeData.signal;
+        badge.className = `signal-badge signal-${activeData.signal.toLowerCase()}`;
+        document.getElementById("kpiConfidence").innerText = `${activeData.confidence.toFixed(1)}%`;
+      }
+
+      // 3. Update Chart
+      if (chartInstance && data.history) {
+        chartInstance.data.labels = data.history.map(h => h.time);
+        chartInstance.data.datasets[0].data = data.history.map(h => h.price);
+        chartInstance.data.datasets[1].data = data.history.map(h => h.sma_1m);
+        chartInstance.update();
+      }
+
+      // 4. Update Signals Table
+      const tbody = document.getElementById("signalsTableBody");
+      tbody.innerHTML = "";
+      data.recent_signals.forEach(row => {
+        const tr = document.createElement("tr");
+        const sigClass = `signal-${row.signal.toLowerCase()}`;
+        tr.innerHTML = `
+          <td>${row.time}</td>
+          <td style="font-weight: 700; color: #60a5fa;">${row.symbol}</td>
+          <td>₹${row.price.toFixed(2)}</td>
+          <td>₹${row.sma_1m.toFixed(2)}</td>
+          <td>${row.rsi_14.toFixed(1)}</td>
+          <td><span class="tag-sm ${sigClass}">${row.signal}</span></td>
+          <td>${row.confidence.toFixed(1)}%</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    window.onload = () => {
+      initChart();
+      fetchDashboardData();
+      setInterval(fetchDashboardData, 3000); // Poll every 3 seconds
+    };
+  </script>
+</body>
+</html>

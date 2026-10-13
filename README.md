@@ -53,7 +53,8 @@ An end-to-end, enterprise-grade streaming analytics pipeline that collects live 
 Stock Market Analytics/
 ├── docker-compose.yml              # Multi-container orchestration (Kafka, Flink, Postgres, Kafka UI)
 ├── requirements.txt                # Python project dependencies
-├── .env                            # Environment variables & configuration
+├── .env.example                    # Environment variables template
+├── .gitignore                      # Git ignore patterns for Python, virtual envs & secrets
 ├── database/
 │   └── init.sql                    # PostgreSQL schema, indexes, view & triggers
 ├── models/
@@ -91,6 +92,7 @@ Stock Market Analytics/
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 ```
 
 ### 2. Verify Pipeline Simulation (Stand-alone)

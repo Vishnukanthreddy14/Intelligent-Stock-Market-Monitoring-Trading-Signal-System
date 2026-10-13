@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Apache ZooKeeper (Coordinates Kafka Broker metadata)
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: stock_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - stock_network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # 2. Apache Kafka (Message Broker for real-time stock ticks)
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: stock_kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 5
+    networks:
+      - stock_network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Kafka Topic Creator (Ensures 'stock_ticks' topic is created with 5 partitions)
+  # ---------------------------------------------------------------------------
+  kafka-init-topics:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: stock_kafka_init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - stock_network
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: |
+      "
+      # Block until Kafka is reachable
+      kafka-topics --bootstrap-server kafka:29092 --list
+
+      echo 'Creating Kafka Topic: stock_ticks with 5 partitions (1 per stock)...'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists \
+        --topic stock_ticks \
+        --partitions 5 \
+        --replication-factor 1 \
+        --config cleanup.policy=delete \
+        --config retention.ms=604800000
+
+      echo 'Topic stock_ticks created successfully!'
+      kafka-topics --bootstrap-server kafka:29092 --describe --topic stock_ticks
+      "
+
+  # ---------------------------------------------------------------------------
+  # 3. Kafka UI (Interactive browser dashboard to inspect Kafka partitions & events)
+  # ---------------------------------------------------------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: stock_kafka_ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - stock_network
+
+  # ---------------------------------------------------------------------------
+  # 4. PostgreSQL (Stores raw ticks, calculated features, and ML signals)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: stock_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: stock_user
+      POSTGRES_PASSWORD: stock_password
+      POSTGRES_DB: stock_analytics
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - stock_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock_user -d stock_analytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # 5. Apache Flink JobManager (Coordinates stateful stream processing)
+  # ---------------------------------------------------------------------------
+  flink-jobmanager:
+    image: flink:1.18.0-scala_2.12-java11
+    container_name: stock_flink_jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        parallelism.default: 5
+    networks:
+      - stock_network
+
+  # ---------------------------------------------------------------------------
+  # 6. Apache Flink TaskManager (Executes stream tasks, windows & ML inference)
+  # ---------------------------------------------------------------------------
+  flink-taskmanager:
+    image: flink:1.18.0-scala_2.12-java11
+    container_name: stock_flink_taskmanager
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 5
+        parallelism.default: 5
+    networks:
+      - stock_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  stock_network:
+    driver: bridge

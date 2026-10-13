@@ -1,0 +1,33 @@
+{
+  "model_type": "RandomForestClassifier",
+  "trained_at": "2026-10-04T00:02:32.326532",
+  "classes": [
+    "BUY",
+    "HOLD",
+    "SELL"
+  ],
+  "feature_columns": [
+    "price_to_sma1m",
+    "price_to_sma5m",
+    "sma_cross",
+    "rsi_14",
+    "rolling_high_diff",
+    "rolling_low_diff",
+    "returns_pct",
+    "price_momentum",
+    "volatility"
+  ],
+  "test_accuracy": 0.5972986493246624,
+  "n_estimators": 120,
+  "feature_importances": {
+    "volatility": 0.17408385135580098,
+    "price_to_sma5m": 0.1678555985546797,
+    "rolling_high_diff": 0.13337564867329002,
+    "sma_cross": 0.12705265743248503,
+    "rolling_low_diff": 0.1162711209883936,
+    "rsi_14": 0.09123643212517285,
+    "price_to_sma1m": 0.07445283293325161,
+    "price_momentum": 0.06410666952037926,
+    "returns_pct": 0.05156518841654701
+  }
+}
